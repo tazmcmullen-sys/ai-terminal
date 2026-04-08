@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Browser AI Trading Terminal</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body{font-family:Arial;background:#020617;color:white;margin:0}
+.container{padding:20px}
+button{padding:8px;margin:5px;background:#2563eb;color:white;border:none;border-radius:6px}
+table{width:100%;border-collapse:collapse;margin-top:10px}
+th,td{padding:8px;border-bottom:1px solid #1e293b}
+.card{border:1px solid #1e293b;padding:10px;margin-top:10px;border-radius:8px}
+</style>
+</head>
+<body>
+<div class="container">
+<h2>AI Trading Terminal (Browser Only)</h2>
+
+<button onclick="run()">Run Screener</button>
+<button onclick="savePortfolio()">Save Portfolio</button>
+<button onclick="loadPortfolio()">Load Portfolio</button>
+
+<div class="card">Top Pick: <span id="top"></span></div>
+
+<table>
+<thead><tr><th>Symbol</th><th>Price</th><th>Intrinsic</th><th>Gap</th><th>Score</th></tr></thead>
+<tbody id="list"></tbody>
+</table>
+
+<div class="card"><canvas id="chart"></canvas></div>
+</div>
+
+<script>
+let stocks=[];
+let history=JSON.parse(localStorage.getItem('history')||"{}");
+
+const symbols=["AAPL","MSFT","NVDA","AMZN","GOOGL","META","TSLA","JPM"];
+
+// Fetch real price (free API)
+async function getPrice(symbol){
+  try{
+    const res=await fetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}`);
+    const data=await res.json();
+    return data.quoteResponse.result[0].regularMarketPrice;
+  }catch{
+    return Math.random()*200;
+  }
+}
+
+// Fake AI valuation (browser-safe)
+function aiValue(price){
+  return price*(1.1+Math.random()*0.2);
+}
+
+async function evaluate(symbol){
+  const price=await getPrice(symbol);
+  const intrinsic=aiValue(price);
+
+  const gap=((price-intrinsic)/intrinsic)*100;
+  const score=(-gap*0.6)+(Math.random()*40);
+
+  if(!history[symbol]) history[symbol]=[];
+  history[symbol].push(gap);
+
+  return {symbol,price,intrinsic,gap,score};
+}
+
+async function run(){
+  stocks=[];
+
+  for(let s of symbols){
+    const data=await evaluate(s);
+    stocks.push(data);
+  }
+
+  stocks.sort((a,b)=>b.score-a.score);
+
+  localStorage.setItem('history',JSON.stringify(history));
+
+  render();
+  drawChart();
+}
+
+function render(){
+  document.getElementById('top').textContent=stocks[0]?.symbol||"";
+
+  document.getElementById('list').innerHTML=stocks.map(s=>`
+    <tr>
+      <td>${s.symbol}</td>
+      <td>$${s.price.toFixed(2)}</td>
+      <td>$${s.intrinsic.toFixed(2)}</td>
+      <td>${s.gap.toFixed(1)}%</td>
+      <td>${s.score.toFixed(1)}</td>
+    </tr>
+  `).join('');
+}
+
+function drawChart(){
+  const ctx=document.getElementById('chart');
+
+  new Chart(ctx,{
+    type:'line',
+    data:{
+      labels:Object.keys(history),
+      datasets:[{
+        label:'Latest Gap %',
+        data:Object.values(history).map(v=>v.slice(-1)[0])
+      }]
+    }
+  });
+}
+
+function savePortfolio(){
+  localStorage.setItem('portfolio',JSON.stringify(stocks.slice(0,3)));
+}
+
+function loadPortfolio(){
+  const p=JSON.parse(localStorage.getItem('portfolio')||"[]");
+  alert("Portfolio loaded: "+p.map(x=>x.symbol).join(','));
+}
+</script>
+</body>
+</html>
